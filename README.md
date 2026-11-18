@@ -83,6 +83,8 @@ distance, and signing style differ. Measure it yourself:
 python run.py self-test          # records your samples, prints 3 accuracy numbers
 ```
 
+Full per-sign breakdown and confusion list: [`docs/accuracy_report.txt`](docs/accuracy_report.txt)
+
 ---
 
 ## The sign chart
