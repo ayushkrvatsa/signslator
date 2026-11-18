@@ -1,0 +1,21 @@
+# SignSlator — Python dependencies
+#
+# Install:  python -m pip install -r requirements.txt
+#
+# NOTE: torch must come from the PyTorch CPU index, not PyPI. If the plain
+# install below fails or pulls a huge CUDA build, run this FIRST:
+#
+#   python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+opencv-python>=5.0.0
+mediapipe>=1.0.0
+numpy>=2.0.0
+scipy>=1.18.0
+pillow>=10.0.0
+requests>=2.31.0
+h5py>=3.10.0
+sounddevice>=0.4.6
+pyttsx3>=2.90
+torch>=2.0.0
+torchvision>=0.15.0
+openai-whisper>=20240930

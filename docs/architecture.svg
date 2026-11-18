@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" font-family="Segoe UI, system-ui, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#8b93a7"/>
+    </marker>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1b2436"/><stop offset="1" stop-color="#24324a"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2a1f36"/><stop offset="1" stop-color="#3a2445"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="560" fill="#0e1117"/>
+
+  <text x="600" y="46" fill="#f2f4f8" font-size="26" font-weight="700" text-anchor="middle">SignSlator — ISL Sign Language ↔ Speech</text>
+  <text x="600" y="72" fill="#8b93a7" font-size="14" text-anchor="middle">Bidirectional pipeline · all free and open-source</text>
+
+  <!-- ═══ ROW 1 : SIGN → SPEECH ═══ -->
+  <text x="40" y="118" fill="#7fb2ff" font-size="15" font-weight="700" letter-spacing="1">SIGN → SPEECH</text>
+
+  <g>
+    <rect x="40"  y="132" width="150" height="72" rx="10" fill="url(#g1)" stroke="#3a4a66"/>
+    <text x="115" y="162" fill="#e8ecf4" font-size="14" font-weight="600" text-anchor="middle">Webcam</text>
+    <text x="115" y="182" fill="#8b93a7" font-size="11" text-anchor="middle">OpenCV capture</text>
+
+    <rect x="225" y="132" width="180" height="72" rx="10" fill="url(#g1)" stroke="#3a4a66"/>
+    <text x="315" y="158" fill="#e8ecf4" font-size="14" font-weight="600" text-anchor="middle">MediaPipe</text>
+    <text x="315" y="176" fill="#e8ecf4" font-size="14" font-weight="600" text-anchor="middle">Holistic</text>
+    <text x="315" y="193" fill="#8b93a7" font-size="11" text-anchor="middle">553 body landmarks</text>
+
+    <rect x="440" y="132" width="170" height="72" rx="10" fill="url(#g1)" stroke="#3a4a66"/>
+    <text x="525" y="158" fill="#e8ecf4" font-size="14" font-weight="600" text-anchor="middle">Hand landmarks</text>
+    <text x="525" y="176" fill="#e8ecf4" font-size="14" font-weight="600" text-anchor="middle">21 × 2 hands</text>
+    <text x="525" y="193" fill="#8b93a7" font-size="11" text-anchor="middle">scale-normalized</text>
+
+    <rect x="645" y="132" width="170" height="72" rx="10" fill="url(#g1)" stroke="#3a4a66"/>
+    <text x="730" y="158" fill="#e8ecf4" font-size="14" font-weight="600" text-anchor="middle">DTW classifier</text>
+    <text x="730" y="176" fill="#e8ecf4" font-size="14" font-weight="600" text-anchor="middle">nearest template</text>
+    <text x="730" y="193" fill="#8b93a7" font-size="11" text-anchor="middle">auto-calibrated</text>
+
+    <rect x="850" y="132" width="150" height="72" rx="10" fill="url(#g1)" stroke="#3a4a66"/>
+    <text x="925" y="162" fill="#e8ecf4" font-size="14" font-weight="600" text-anchor="middle">pyttsx3</text>
+    <text x="925" y="182" fill="#8b93a7" font-size="11" text-anchor="middle">offline TTS</text>
+
+    <rect x="1035" y="132" width="130" height="72" rx="10" fill="#1f3a2a" stroke="#2f6b45"/>
+    <text x="1100" y="162" fill="#a8e6c0" font-size="14" font-weight="700" text-anchor="middle">Spoken</text>
+    <text x="1100" y="182" fill="#a8e6c0" font-size="14" font-weight="700" text-anchor="middle">word</text>
+  </g>
+
+  <g stroke="#8b93a7" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <line x1="190" y1="168" x2="221" y2="168"/>
+    <line x1="405" y1="168" x2="436" y2="168"/>
+    <line x1="610" y1="168" x2="641" y2="168"/>
+    <line x1="815" y1="168" x2="846" y2="168"/>
+    <line x1="1000" y1="168" x2="1031" y2="168"/>
+  </g>
+
+  <!-- ═══ ROW 2 : SPEECH → SIGN ═══ -->
+  <text x="40" y="290" fill="#d9a8ff" font-size="15" font-weight="700" letter-spacing="1">SPEECH → SIGN</text>
+
+  <g>
+    <rect x="40"  y="304" width="150" height="72" rx="10" fill="url(#g2)" stroke="#4a3a66"/>
+    <text x="115" y="334" fill="#efe8f7" font-size="14" font-weight="600" text-anchor="middle">Microphone</text>
+    <text x="115" y="354" fill="#a99ab8" font-size="11" text-anchor="middle">16 kHz capture</text>
+
+    <rect x="225" y="304" width="180" height="72" rx="10" fill="url(#g2)" stroke="#4a3a66"/>
+    <text x="315" y="334" fill="#efe8f7" font-size="14" font-weight="600" text-anchor="middle">Whisper ASR</text>
+    <text x="315" y="354" fill="#a99ab8" font-size="11" text-anchor="middle">offline, local, CPU</text>
+
+    <rect x="440" y="304" width="170" height="72" rx="10" fill="url(#g2)" stroke="#4a3a66"/>
+    <text x="525" y="334" fill="#efe8f7" font-size="14" font-weight="600" text-anchor="middle">Text</text>
+    <text x="525" y="354" fill="#a99ab8" font-size="11" text-anchor="middle">word lookup</text>
+
+    <rect x="645" y="304" width="170" height="72" rx="10" fill="url(#g2)" stroke="#4a3a66"/>
+    <text x="730" y="334" fill="#efe8f7" font-size="14" font-weight="600" text-anchor="middle">Sign templates</text>
+    <text x="730" y="354" fill="#a99ab8" font-size="11" text-anchor="middle">ISL500 · 153 signs</text>
+
+    <rect x="850" y="304" width="150" height="72" rx="10" fill="url(#g2)" stroke="#4a3a66"/>
+    <text x="925" y="334" fill="#efe8f7" font-size="14" font-weight="600" text-anchor="middle">Landmark</text>
+    <text x="925" y="354" fill="#efe8f7" font-size="14" font-weight="600" text-anchor="middle">replay</text>
+
+    <rect x="1035" y="304" width="130" height="72" rx="10" fill="#3a2a1f" stroke="#6b4a2f"/>
+    <text x="1100" y="334" fill="#f0d0a8" font-size="14" font-weight="700" text-anchor="middle">Animated</text>
+    <text x="1100" y="354" fill="#f0d0a8" font-size="14" font-weight="700" text-anchor="middle">sign</text>
+  </g>
+
+  <g stroke="#8b93a7" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <line x1="190" y1="340" x2="221" y2="340"/>
+    <line x1="405" y1="340" x2="436" y2="340"/>
+    <line x1="610" y1="340" x2="641" y2="340"/>
+    <line x1="815" y1="340" x2="846" y2="340"/>
+    <line x1="1000" y1="340" x2="1031" y2="340"/>
+  </g>
+
+  <!-- ═══ DATA SOURCE ═══ -->
+  <rect x="40" y="420" width="540" height="108" rx="10" fill="#141a26" stroke="#2a3448"/>
+  <text x="60" y="450" fill="#f2f4f8" font-size="15" font-weight="700">Sign data — ISL500 dataset</text>
+  <text x="60" y="474" fill="#a8b0c0" font-size="12.5">500 Indian Sign Language words · 15 signers · MediaPipe landmarks</text>
+  <text x="60" y="494" fill="#a8b0c0" font-size="12.5">pre-extracted · downloaded at runtime, no recording needed</text>
+  <text x="60" y="514" fill="#6f7a8f" font-size="11.5">HuggingFace: ISL500/ISL-DATA · research &amp; academic use</text>
+
+  <rect x="620" y="420" width="545" height="108" rx="10" fill="#141a26" stroke="#2a3448"/>
+  <text x="640" y="450" fill="#f2f4f8" font-size="15" font-weight="700">Verification</text>
+  <text x="640" y="474" fill="#a8b0c0" font-size="12.5">Leave-one-out cross-validation on held-out sessions</text>
+  <text x="640" y="494" fill="#a8b0c0" font-size="12.5">Auto-calibrated acceptance threshold + runner-up margin</text>
+  <text x="640" y="514" fill="#6f7a8f" font-size="11.5">Scale normalization removes distance &amp; hand-size bias</text>
+</svg>
