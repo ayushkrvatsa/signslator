@@ -16,6 +16,7 @@ Not included (re-created automatically on the target machine):
 Usage:  python package.py
 """
 
+import argparse
 import os
 import sys
 import zipfile
@@ -27,8 +28,13 @@ OUT = os.path.join(HERE, "signslator-portable.zip")
 INCLUDE = [
     ("run.py", False),
     ("setup.py", False),
+    ("package.py", False),
     ("requirements.txt", False),
     ("README.md", False),
+    ("LICENSE", False),
+    (".gitignore", False),
+    (".gitattributes", False),
+    ("docs", True),
     ("signslator/__init__.py", False),
     ("signslator/demo_camera.py", False),
     ("signslator/demo_speech.py", False),
@@ -38,6 +44,7 @@ INCLUDE = [
     ("signslator/sign_guide.py", False),
     ("signslator/sign_chart.py", False),
     ("signslator/self_test.py", False),
+    ("signslator/full_eval.py", False),
     ("signslator/test_isl500_crossval.py", False),
     ("signslator/test_isl500_classifier.py", False),
     ("signslator/test_isl500_recognize.py", False),
@@ -49,7 +56,7 @@ INCLUDE = [
 
 # Never ship these
 EXCLUDE_EXT = {".h5", ".mp4", ".pyc"}
-EXCLUDE_DIRS = {"__pycache__", "isl500_cache", "captures"}
+EXCLUDE_DIRS = {"__pycache__", "isl500_cache", "captures", ".git"}
 
 
 def should_skip(path):
@@ -60,6 +67,24 @@ def should_skip(path):
 
 
 def main():
+    ap = argparse.ArgumentParser(description="Package SignSlator for transfer")
+    ap.add_argument("--no-data", action="store_true",
+                    help="Exclude sign templates (~56 MB) — recipient runs isl-download")
+    ap.add_argument("--no-guide", action="store_true",
+                    help="Exclude generated GIFs and chart (~14 MB)")
+    ap.add_argument("--out", default=None, help="Output zip path")
+    args = ap.parse_args()
+
+    global OUT
+    if args.out:
+        OUT = args.out
+
+    include = list(INCLUDE)
+    if args.no_data:
+        include = [(p, d) for p, d in include if p != "signslator/data/signs"]
+    if args.no_guide:
+        include = [(p, d) for p, d in include if p != "signslator/sign_guide"]
+
     if os.path.exists(OUT):
         os.remove(OUT)
 
@@ -67,7 +92,7 @@ def main():
     total_bytes = 0
 
     with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
-        for rel, is_dir in INCLUDE:
+        for rel, is_dir in include:
             src = os.path.join(HERE, rel)
             if not os.path.exists(src):
                 print(f"  skip (missing): {rel}")
@@ -97,7 +122,7 @@ def main():
         return 1
 
     size = os.path.getsize(OUT)
-    print(f"\nPackaged {count} files → {OUT}")
+    print(f"\nPackaged {count} files -> {OUT}")
     print(f"Zip size:   {size/1024/1024:.1f} MB")
     print(f"Unpacked:   {total_bytes/1024/1024:.1f} MB")
     print()
@@ -106,11 +131,13 @@ def main():
         for n in sorted(z.namelist()):
             print(f"  {n}")
     print()
-    print("On the other machine:")
+    print("On the target machine:")
     print("  1. Unzip the folder anywhere")
     print("  2. cd into it")
     print("  3. python setup.py        # installs dependencies + model")
-    print("  4. python run.py recognize")
+    if args.no_data:
+        print("  4. python run.py isl-download   # fetch signs (needs internet)")
+    print("  5. python run.py recognize")
     return 0
 
 
