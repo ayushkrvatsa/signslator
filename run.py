@@ -9,6 +9,7 @@ Usage:
   python run.py train <sign>    # Phase 2: train a sign
   python run.py recognize       # Phase 2: live sign recognition
   python run.py speech-to-sign  # Phase 3: speech→sign animation
+  python run.py text-to-sign    # Phase 3: typed text→sign animation
   python run.py list            # List trained signs
   python run.py demo            # Run all phases sequentially (quick demo)
 """
@@ -75,6 +76,29 @@ def run_recognize(threshold=0.3, max_dist=None, window=2.0):
 def run_speech_to_sign():
     from signslator.speech_to_sign import main_loop
     main_loop()
+
+
+def run_text_to_sign(text=None, duration=2.0, speak=False, list_only=False):
+    """Typed text → sign animation. No microphone, no Whisper needed."""
+    from signslator.speech_to_sign import play_text, load_sign_templates
+    from signslator import get_vocabulary
+
+    if list_only:
+        vocab = get_vocabulary()
+        if not vocab:
+            print("No signs recorded yet.")
+        else:
+            print(f"\nRecorded signs ({len(vocab)}):")
+            for v in vocab:
+                print(f"  {v}: {len(load_sign_templates(v))} sample(s)")
+        return
+
+    if not text:
+        print("Usage: python run.py text-to-sign \"hello water\"")
+        print("       python run.py text-to-sign --list")
+        return
+
+    play_text(" ".join(text), duration=duration, speak=speak)
 
 
 def run_isl_download(words=None, user="ISL_DATA_USER001", sessions=4):
@@ -257,6 +281,18 @@ def main():
     # Speech to sign
     subparsers.add_parser("speech-to-sign", help="Phase 3: Speech→sign animation")
 
+    # Text to sign
+    t2s_p = subparsers.add_parser("text-to-sign",
+                                  help="Typed text → sign animation (no mic needed)")
+    t2s_p.add_argument("text", nargs="*", default=None,
+                       help="Text to convert, e.g. \"hello water\"")
+    t2s_p.add_argument("--duration", type=float, default=2.0,
+                       help="Seconds per sign (default 2.0)")
+    t2s_p.add_argument("--speak", action="store_true",
+                       help="Speak the matched signs aloud")
+    t2s_p.add_argument("--list", action="store_true",
+                       help="List recorded signs and exit")
+
     # List
     subparsers.add_parser("list", help="List trained signs")
 
@@ -333,6 +369,8 @@ def main():
         run_recognize(args.threshold, args.max_dist, args.window)
     elif args.command == "speech-to-sign":
         run_speech_to_sign()
+    elif args.command == "text-to-sign":
+        run_text_to_sign(args.text, args.duration, args.speak, args.list)
     elif args.command == "list":
         run_list()
     elif args.command == "remove":

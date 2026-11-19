@@ -19,6 +19,7 @@ not record anything, an optional download pulls public ISL research data instead
 |---|---|
 | **Sign → Speech** | Webcam → MediaPipe Hand Landmarker → hand landmarks (21 × 2) → DTW classifier → pyttsx3 |
 | **Speech → Sign** | Microphone → Whisper ASR → text → sign lookup → landmark animation |
+| **Text → Sign** | Typed text → sign lookup → landmark animation *(no mic, no Whisper)* |
 
 **Why a dedicated hand model?** The old pipeline used MediaPipe *Holistic*, which
 runs one shared backbone for pose, face and hands. Its hand landmarks were
@@ -52,6 +53,9 @@ python run.py recognize
 
 # 3b. Speech → sign (microphone)
 python run.py speech-to-sign
+
+# 3c. Text → sign (no microphone, no Whisper)
+python run.py text-to-sign "hello please"
 ```
 
 Requires Python 3.9+, a webcam, and internet for the first setup.
@@ -125,7 +129,9 @@ by a margin ratio.
 | `python run.py remove HELLO` | Delete a trained sign (asks first) |
 | `python run.py remove --all -y` | Delete every trained sign |
 | `python run.py recognize` | Live sign → speech |
-| `python run.py speech-to-sign` | Live speech → sign animation |
+| `python run.py speech-to-sign` | Live speech → sign animation (microphone + Whisper) |
+| `python run.py text-to-sign "hello water"` | Typed text → sign animation (no mic needed) |
+| `python run.py text-to-sign --list` | Signs that have a recording |
 | `python run.py self-test` | Measure accuracy on **your** hands |
 | `python run.py isl-download` | Fetch ISL signs from the ISL500 dataset (optional) |
 | `python run.py isl-evaluate` | Leave-one-out accuracy on a downloaded sign set |
