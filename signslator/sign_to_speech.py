@@ -25,8 +25,8 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import (
-    HolisticLandmarker,
-    HolisticLandmarkerOptions,
+    HandLandmarker,
+    HandLandmarkerOptions,
     RunningMode,
 )
 import numpy as np
@@ -40,19 +40,25 @@ from signslator import VOCABULARY, SIGN_LANGUAGE
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "signs")
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "holistic_landmarker.task")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "hand_landmarker.task")
 
 # ── MediaPipe setup ─────────────────────────────────────────────────────────────
+#
+# The dedicated HandLandmarker replaces HolisticLandmarker. Holistic runs one
+# shared backbone for pose + face + hands, so its hand landmarks are noisier;
+# the hand-only model is more accurate and faster (21 ms vs 29 ms per frame at
+# 640x480). Cost: no face landmarks — this pipeline never used them for
+# classification, only for an optional overlay.
 
 base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
-options = HolisticLandmarkerOptions(
+options = HandLandmarkerOptions(
     base_options=base_options,
     running_mode=RunningMode.VIDEO,
-    min_pose_detection_confidence=0.5,
-    min_pose_landmarks_confidence=0.5,
-    min_hand_landmarks_confidence=0.5,
+    num_hands=2,
+    min_hand_detection_confidence=0.5,
+    min_hand_presence_confidence=0.5,
 )
-holistic = HolisticLandmarker.create_from_options(options)
+hand_landmarker = HandLandmarker.create_from_options(options)
 
 # ── TTS ────────────────────────────────────────────────────────────────────────
 
@@ -113,6 +119,51 @@ def _normalize_hand(points: np.ndarray) -> np.ndarray:
     return centered / scale
 
 
+def _hand_slots(result) -> tuple:
+    """
+    Return (left_points, right_points), each a (21, 3) float array or None.
+
+    HandLandmarker gives one landmark list per detected hand plus a parallel
+    `handedness` list. Slots are assigned by handedness; hands with a missing
+    or ambiguous label fall back to x-position (leftmost → left slot).
+
+    Note: MediaPipe labels are correct for the raw camera frame, so a hand on
+    the image's left is genuinely the person's right hand (as when facing
+    someone). Consistency between training and recognition is what matters —
+    the same physical hand must always land in the same slot.
+    """
+    hands = getattr(result, "hand_landmarks", None) or []
+    handed = getattr(result, "handedness", None) or []
+
+    left = right = None
+    leftover = []
+
+    for i, hand in enumerate(hands):
+        pts = np.array([[lm.x, lm.y, lm.z] for lm in hand], dtype=np.float32)
+        if pts.shape[0] < 21 or not np.any(pts):
+            continue
+
+        label = None
+        if i < len(handed) and handed[i]:
+            label = getattr(handed[i][0], "category_name", None)
+
+        if label == "Left" and left is None:
+            left = pts
+        elif label == "Right" and right is None:
+            right = pts
+        else:
+            leftover.append(pts)
+
+    # Fill any remaining slot by horizontal position.
+    for pts in sorted(leftover, key=lambda p: float(p[:, 0].mean())):
+        if left is None:
+            left = pts
+        elif right is None:
+            right = pts
+
+    return left, right
+
+
 def extract_hand_features(result) -> np.ndarray:
     """
     Extract a feature vector from hand landmarks in a single frame.
@@ -128,17 +179,15 @@ def extract_hand_features(result) -> np.ndarray:
     """
     features = np.zeros(144, dtype=np.float32)
 
-    def grab(landmarks):
-        """Turn a landmark list into a normalized (21, 3) array."""
-        if not landmarks:
-            return None
-        pts = np.array([[lm.x, lm.y, lm.z] for lm in landmarks], dtype=np.float32)
-        if not np.any(pts):
+    left, right = _hand_slots(result)
+
+    def grab(pts):
+        if pts is None:
             return None
         return _normalize_hand(pts) if NORMALIZE_SCALE else pts
 
-    left = grab(result.left_hand_landmarks)
-    right = grab(result.right_hand_landmarks)
+    left = grab(left)
+    right = grab(right)
 
     if left is not None:
         features[0:63] = left.flatten()
@@ -165,7 +214,7 @@ def extract_hand_features(result) -> np.ndarray:
 
 
 def extract_sequence_features(result_list: list) -> np.ndarray:
-    """Extract feature matrix from a list of HolisticLandmarkerResult objects."""
+    """Extract feature matrix from a list of HandLandmarkerResult objects."""
     seq = []
     for r in result_list:
         f = extract_hand_features(r)
@@ -233,8 +282,14 @@ def _build_prefilter(templates: dict, length: int = 32) -> dict:
     """Resample every template once, so live matching doesn't repeat the work."""
     out = {}
     for sign, seqs in templates.items():
-        out[sign] = [_resample(s, length) for s in seqs if s.shape[0] >= 5]
+        out[sign] = [_resample(s, length) for s in seqs
+                     if s.shape[0] >= 5 and _has_signal(s)]
     return out
+
+
+def _has_signal(seq: np.ndarray) -> bool:
+    """True if any frame in the sequence carries a detected hand."""
+    return bool(np.any(seq))
 
 
 def find_best_match(live_seq: np.ndarray, templates: dict,
@@ -255,6 +310,11 @@ def find_best_match(live_seq: np.ndarray, templates: dict,
     the DTW distance for each refined candidate.
     """
     if live_seq.shape[0] < 5:  # too short
+        return None, float('inf'), {}
+
+    # An all-zero sequence means no hand was ever in frame. Every empty
+    # sequence matches every other empty sequence at distance 0, so refuse.
+    if not _has_signal(live_seq):
         return None, float('inf'), {}
 
     if prefilter is None:
@@ -484,6 +544,7 @@ def train_sign(sign_name: str, num_samples: int = 5, duration: float = 3.0):
         results = []
         start_time = time.time()
         frame_count = 0
+        no_hand_frames = 0
 
         while time.time() - start_time < duration:
             ret, frame = cap.read()
@@ -493,26 +554,41 @@ def train_sign(sign_name: str, num_samples: int = 5, duration: float = 3.0):
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            result = holistic.detect_for_video(mp_image, int(time.time() * 1000))
+            result = hand_landmarker.detect_for_video(mp_image, int(time.time() * 1000))
             results.append(result)
+
+            hands_now = len(getattr(result, "hand_landmarks", None) or [])
+            if hands_now == 0:
+                no_hand_frames += 1
 
             # Visual feedback
             display = frame.copy()
             progress = (time.time() - start_time) / duration
             cv2.rectangle(display, (0, 0), (int(640 * progress), 10), (0, 255, 0), -1)
+            _draw_landmarks(display, result)
             cv2.putText(display, f"Recording... {frame_count} frames",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            if hands_now == 0:
+                cv2.putText(display, "NO HAND DETECTED", (10, 58),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.imshow("SignSlator — Training", display)
             cv2.waitKey(1)
 
+        if no_hand_frames > frame_count * 0.5:
+            print(f"  WARNING: no hand in {no_hand_frames}/{frame_count} frames — "
+                  f"this sample is mostly empty. Consider re-recording.")
+
         # Save
         seq = extract_sequence_features(results)
-        if seq.shape[0] >= 5:
+        if seq.shape[0] < 5:
+            print(f"  WARNING: Too few frames ({seq.shape[0]}), skipping")
+        elif not _has_signal(seq):
+            print(f"  WARNING: no hand detected in this sample — NOT saved.")
+            print(f"           Put your hand in frame and record again.")
+        else:
             template_path = os.path.join(sign_dir, f"template_{sample_i}.npy")
             np.save(template_path, seq)
             print(f"  Saved: {template_path} ({seq.shape[0]} frames)")
-        else:
-            print(f"  WARNING: Too few frames ({seq.shape[0]}), skipping")
 
         time.sleep(0.5)
 
@@ -551,8 +627,8 @@ def recognize_sign(confidence_threshold: float = 0.3,
     print("Press 'q' to quit, 't' to go back to training\n")
 
     cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 480)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     # Ring buffer of landmark results (only this is needed for matching)
     buffer_size = int(30 * window_seconds)  # 30 fps × window_seconds
@@ -582,7 +658,7 @@ def recognize_sign(confidence_threshold: float = 0.3,
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        result = holistic.detect_for_video(mp_image, int(time.time() * 1000))
+        result = hand_landmarker.detect_for_video(mp_image, int(time.time() * 1000))
 
         result_buffer.append(result)
         if len(result_buffer) > buffer_size:
@@ -624,7 +700,10 @@ def recognize_sign(confidence_threshold: float = 0.3,
                     last_tts_time = now
 
         # ── drawing (cheap, every frame) ──
-        _draw_landmarks(display, result)
+        hands_now = _draw_landmarks(display, result)
+        if hands_now == 0:
+            cv2.putText(display, "No hand in frame", (10, display.shape[0] - 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
 
         y = 46
         for i, (s, d) in enumerate(sorted(verdict["dists"].items(), key=lambda x: x[1])):
@@ -665,34 +744,23 @@ def recognize_sign(confidence_threshold: float = 0.3,
 
 
 def _draw_landmarks(display, result, show_face=False):
-    """Draw hand landmarks on display frame. Body pose is detected but not shown."""
-    # Hands only — blue dots + connections
-    all_hands = (result.left_hand_landmarks or []) + (result.right_hand_landmarks or [])
-    for idx, lm in enumerate(all_hands):
-        x, y = int(lm.x * display.shape[1]), int(lm.y * display.shape[0])
-        cv2.circle(display, (x, y), 4, (255, 0, 0), -1)
+    """Draw detected hands on the display frame.
 
-    # Draw hand connections (indices 0-20 = left hand, 21+ = right hand)
-    left_count = len(result.left_hand_landmarks or [])
-    for i, j in HAND_CONN:
-        # Left hand connections
-        if i < left_count and j < left_count:
-            li, lj = all_hands[i], all_hands[j]
-            cv2.line(display, (int(li.x*display.shape[1]), int(li.y*display.shape[0])),
-                     (int(lj.x*display.shape[1]), int(lj.y*display.shape[0])),
-                     (255, 100, 0), 2)
-        # Right hand connections (offset by left hand count)
-        elif left_count > 0 and (i + left_count) < len(all_hands) and (j + left_count) < len(all_hands):
-            ri, rj = all_hands[i + left_count], all_hands[j + left_count]
-            cv2.line(display, (int(ri.x*display.shape[1]), int(ri.y*display.shape[0])),
-                     (int(rj.x*display.shape[1]), int(rj.y*display.shape[0])),
-                     (255, 100, 0), 2)
+    `show_face` is accepted for backward compatibility but ignored — the
+    hand-only model produces no face landmarks.
+    """
+    hands = getattr(result, "hand_landmarks", None) or []
+    w, h = display.shape[1], display.shape[0]
 
-    # Optional: face landmarks (for signs that use facial expression)
-    if show_face and result.face_landmarks:
-        for lm in result.face_landmarks:
-            x, y = int(lm.x * display.shape[1]), int(lm.y * display.shape[0])
-            cv2.circle(display, (x, y), 1, (0, 255, 255), -1)
+    for hand in hands:
+        pts = [(int(lm.x * w), int(lm.y * h)) for lm in hand]
+        for i, j in HAND_CONN:
+            if i < len(pts) and j < len(pts):
+                cv2.line(display, pts[i], pts[j], (255, 100, 0), 2)
+        for p in pts:
+            cv2.circle(display, p, 4, (255, 0, 0), -1)
+
+    return len(hands)
 
 
 # ── Template management ────────────────────────────────────────────────────────
@@ -712,7 +780,10 @@ def load_all_templates() -> dict:
             if fname.endswith('.npy'):
                 path = os.path.join(sign_dir, fname)
                 seq = np.load(path)
-                templates[sign_name].append(seq)
+                if seq.shape[0] >= 5 and _has_signal(seq):
+                    templates[sign_name].append(seq)
+                else:
+                    print(f"  Skipping empty template: {fname}")
         if templates[sign_name]:
             print(f"  Loaded '{sign_name}': {len(templates[sign_name])} templates")
         else:

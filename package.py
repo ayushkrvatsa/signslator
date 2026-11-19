@@ -4,13 +4,13 @@ Package SignSlator for transfer to another machine.
 
 Produces: signslator-portable.zip containing
   - all source code
-  - the MediaPipe model (14 MB)
-  - your downloaded sign templates
-  - sign guide GIFs
+  - the MediaPipe hand model (8 MB)
+  - your trained sign templates
   - setup.py + requirements.txt + README.md
 
 Not included (re-created automatically on the target machine):
   - Whisper model  (~140 MB, downloads on first speech-to-sign run)
+  - the old holistic model (dev-only, used by compare_detectors.py)
   - isl500_cache   (raw .h5 files, only needed for re-downloading signs)
 
 Usage:  python package.py
@@ -49,6 +49,11 @@ INCLUDE = [
     ("signslator/test_isl500_classifier.py", False),
     ("signslator/test_isl500_recognize.py", False),
     ("signslator/test_normalization.py", False),
+    ("signslator/test_hand_features.py", False),
+    ("signslator/test_roundtrip.py", False),
+    ("signslator/test_matcher_verify.py", False),
+    ("signslator/probe_hand.py", False),
+    ("signslator/compare_detectors.py", False),
     ("signslator/models", True),
     ("signslator/data/signs", True),
     ("signslator/sign_guide", True),
@@ -57,11 +62,15 @@ INCLUDE = [
 # Never ship these
 EXCLUDE_EXT = {".h5", ".mp4", ".pyc"}
 EXCLUDE_DIRS = {"__pycache__", "isl500_cache", "captures", ".git"}
+# Dev-only: the old model, kept locally for compare_detectors.py.
+EXCLUDE_FILES = {"holistic_landmarker.task"}
 
 
 def should_skip(path):
     parts = set(path.replace("\\", "/").split("/"))
     if parts & EXCLUDE_DIRS:
+        return True
+    if os.path.basename(path) in EXCLUDE_FILES:
         return True
     return os.path.splitext(path)[1] in EXCLUDE_EXT
 
@@ -69,9 +78,9 @@ def should_skip(path):
 def main():
     ap = argparse.ArgumentParser(description="Package SignSlator for transfer")
     ap.add_argument("--no-data", action="store_true",
-                    help="Exclude sign templates (~56 MB) — recipient runs isl-download")
+                    help="Exclude sign templates — recipient trains their own signs")
     ap.add_argument("--no-guide", action="store_true",
-                    help="Exclude generated GIFs and chart (~14 MB)")
+                    help="Exclude generated GIFs and chart")
     ap.add_argument("--out", default=None, help="Output zip path")
     args = ap.parse_args()
 
@@ -136,7 +145,7 @@ def main():
     print("  2. cd into it")
     print("  3. python setup.py        # installs dependencies + model")
     if args.no_data:
-        print("  4. python run.py isl-download   # fetch signs (needs internet)")
+        print("  4. python run.py train HELLO    # record your first sign")
     print("  5. python run.py recognize")
     return 0
 

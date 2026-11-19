@@ -240,7 +240,7 @@ def main():
 
     signs = [s.upper() for s in args.sign] if args.sign else get_vocabulary()
     if not signs:
-        print("No signs. Run: python run.py isl-download")
+        print("No signs yet. Train one:  python run.py train HELLO")
         return
 
     os.makedirs(GUIDE_DIR, exist_ok=True)

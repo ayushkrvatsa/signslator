@@ -180,7 +180,7 @@ def download_reference_video(sign: str, user: str = "User001") -> str:
 def list_signs():
     signs = get_vocabulary()
     if not signs:
-        print("No signs downloaded. Run: python run.py isl-download")
+        print("No signs yet. Train one:  python run.py train HELLO")
         return
     print(f"\n{len(signs)} signs available:\n")
     for s in signs:
@@ -220,7 +220,7 @@ def main():
 
     signs = [args.sign.upper()] if args.sign else get_vocabulary()
     if not signs:
-        print("No signs available. Run: python run.py isl-download")
+        print("No signs yet. Train one:  python run.py train HELLO")
         return
 
     print(f"Rendering {len(signs)} sign animations to GIF...\n")

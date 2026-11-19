@@ -90,7 +90,7 @@ def main():
     y1, h = 166, 104
     boxes1 = [
         (60, 216, ["Webcam", "OpenCV capture"]),
-        (320, 258, ["MediaPipe Holistic", "553 body landmarks"]),
+        (320, 258, ["MediaPipe Hand", "21 landmarks / hand"]),
         (600, 240, ["Hand landmarks", "21 × 2 · normalized"]),
         (880, 240, ["DTW classifier", "auto-calibrated"]),
         (1160, 216, ["pyttsx3", "offline TTS"]),
@@ -115,7 +115,7 @@ def main():
         (60, 216, ["Microphone", "16 kHz capture"]),
         (320, 258, ["Whisper ASR", "offline, local, CPU"]),
         (600, 240, ["Text", "word lookup"]),
-        (880, 240, ["Sign templates", "ISL500 · 153 signs"]),
+        (880, 240, ["Sign templates", "your recordings"]),
         (1160, 216, ["Landmark replay", ""]),
     ]
     for x, w, lines in boxes2:
@@ -133,21 +133,21 @@ def main():
     y3, h3 = 530, 250
     d.rounded_rectangle([60, y3, 870, y3 + h3], radius=14, fill=(20, 26, 38),
                         outline=(42, 52, 72), width=2)
-    d.text((84, y3 + 26), "Sign data — ISL500 dataset", font=F_INFO_T, fill=TEXT)
-    d.text((84, y3 + 70), "500 Indian Sign Language words · 15 signers", font=F_INFO, fill=(168, 176, 192))
-    d.text((84, y3 + 100), "MediaPipe landmarks pre-extracted", font=F_INFO, fill=(168, 176, 192))
-    d.text((84, y3 + 130), "Downloaded at runtime — no recording needed", font=F_INFO, fill=(168, 176, 192))
-    d.text((84, y3 + 180), "HuggingFace: ISL500/ISL-DATA", font=F_INFO_S, fill=(111, 122, 143))
-    d.text((84, y3 + 205), "Licensed for research & academic use", font=F_INFO_S, fill=(111, 122, 143))
+    d.text((84, y3 + 26), "Sign data — your own recordings", font=F_INFO_T, fill=TEXT)
+    d.text((84, y3 + 70), "Templates are recordings of your hands", font=F_INFO, fill=(168, 176, 192))
+    d.text((84, y3 + 100), "5+ samples per sign, stored locally", font=F_INFO, fill=(168, 176, 192))
+    d.text((84, y3 + 130), "Optional: ISL500 public dataset instead", font=F_INFO, fill=(168, 176, 192))
+    d.text((84, y3 + 180), "No sign data ships with this repository", font=F_INFO_S, fill=(111, 122, 143))
+    d.text((84, y3 + 205), "nothing leaves your machine", font=F_INFO_S, fill=(111, 122, 143))
 
     d.rounded_rectangle([930, y3, 1740, y3 + h3], radius=14, fill=(20, 26, 38),
                         outline=(42, 52, 72), width=2)
     d.text((954, y3 + 26), "Verification", font=F_INFO_T, fill=TEXT)
-    d.text((954, y3 + 70), "Leave-one-out cross-validation on held-out sessions", font=F_INFO, fill=(168, 176, 192))
-    d.text((954, y3 + 100), "Auto-calibrated accept threshold + runner-up margin", font=F_INFO, fill=(168, 176, 192))
-    d.text((954, y3 + 130), "Scale normalization removes distance & hand-size bias", font=F_INFO, fill=(168, 176, 192))
-    d.text((954, y3 + 180), "Weakest signs and confusions reported", font=F_INFO_S, fill=(111, 122, 143))
-    d.text((954, y3 + 205), "so accuracy claims are reproducible", font=F_INFO_S, fill=(111, 122, 143))
+    d.text((954, y3 + 70), "Auto-calibrated threshold from your own templates", font=F_INFO, fill=(168, 176, 192))
+    d.text((954, y3 + 100), "Runner-up margin rejects ambiguous matches", font=F_INFO, fill=(168, 176, 192))
+    d.text((954, y3 + 130), "Scale normalization removes hand-size bias", font=F_INFO, fill=(168, 176, 192))
+    d.text((954, y3 + 180), "Measure it yourself: python run.py self-test", font=F_INFO_S, fill=(111, 122, 143))
+    d.text((954, y3 + 205), "no accuracy is claimed without your data", font=F_INFO_S, fill=(111, 122, 143))
 
     img.save(OUT, "PNG", optimize=True)
     print(f"Saved {OUT}  ({img.size[0]}x{img.size[1]})")

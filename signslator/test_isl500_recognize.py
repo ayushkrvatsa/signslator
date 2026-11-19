@@ -15,7 +15,7 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import (
-    HolisticLandmarker, HolisticLandmarkerOptions, RunningMode,
+    HandLandmarker, HandLandmarkerOptions, RunningMode,
 )
 import numpy as np
 import time
@@ -31,16 +31,15 @@ from signslator.sign_to_speech import (
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "holistic_landmarker.task")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "hand_landmarker.task")
 base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
-options = HolisticLandmarkerOptions(
+options = HandLandmarkerOptions(
     base_options=base_options,
     running_mode=RunningMode.VIDEO,
-    min_pose_detection_confidence=0.5,
-    min_pose_landmarks_confidence=0.5,
-    min_hand_landmarks_confidence=0.5,
+    num_hands=2,
+    min_hand_detection_confidence=0.5,
 )
-holistic = HolisticLandmarker.create_from_options(options)
+landmarker = HandLandmarker.create_from_options(options)
 
 # ── Load ISL500 templates ──────────────────────────────────────────────────────
 
@@ -76,7 +75,7 @@ while True:
 
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-    result = holistic.detect_for_video(mp_image, int(time.time() * 1000))
+    result = landmarker.detect_for_video(mp_image, int(time.time() * 1000))
 
     frame_buffer.append(frame)
     result_buffer.append(result)
@@ -125,5 +124,5 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
-holistic.close()
+landmarker.close()
 print("\nDone.")

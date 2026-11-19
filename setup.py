@@ -21,9 +21,9 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(HERE, "signslator", "models")
-MODEL_PATH = os.path.join(MODEL_DIR, "holistic_landmarker.task")
-MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/holistic_landmarker/"
-             "holistic_landmarker/float16/latest/holistic_landmarker.task")
+MODEL_PATH = os.path.join(MODEL_DIR, "hand_landmarker.task")
+MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
+             "hand_landmarker/float16/latest/hand_landmarker.task")
 
 # Core packages needed for sign→speech (camera, landmarks, TTS, classifier)
 CORE_PACKAGES = [
@@ -124,7 +124,7 @@ def download_model():
         return True
 
     os.makedirs(MODEL_DIR, exist_ok=True)
-    print(f"  Downloading holistic_landmarker.task (~14 MB)...")
+    print(f"  Downloading hand_landmarker.task (~8 MB)...")
     try:
         import urllib.request
         urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
@@ -171,7 +171,7 @@ def verify(with_whisper=True):
                        if os.path.isdir(os.path.join(signs_dir, d))])
     print(f"  [{'OK ' if n_signs else '-- '}] Sign data: {n_signs} sign(s)")
     if n_signs == 0:
-        print("        → Run:  python run.py isl-download")
+        print("        → Run:  python run.py train HELLO")
 
     return ok
 
@@ -211,7 +211,7 @@ def main():
     print("=" * 60)
     if ok:
         print("Setup complete. Next steps:")
-        print("  python run.py isl-download    # fetch ISL signs")
+        print("  python run.py train HELLO     # record your first sign")
         print("  python run.py recognize       # sign → speech")
         if with_whisper:
             print("  python run.py speech-to-sign  # speech → sign")

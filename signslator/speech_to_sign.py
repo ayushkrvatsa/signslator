@@ -17,13 +17,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import cv2
-import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python.vision import (
-    HolisticLandmarker,
-    HolisticLandmarkerOptions,
-    RunningMode,
-)
 import numpy as np
 import whisper
 import sounddevice as sd
@@ -37,20 +30,7 @@ from signslator import get_vocabulary, SIGN_LANGUAGE
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "signs")
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "holistic_landmarker.task")
 ASR_MODEL = "base"
-
-# ── MediaPipe ───────────────────────────────────────────────────────────────────
-
-base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
-options = HolisticLandmarkerOptions(
-    base_options=base_options,
-    running_mode=RunningMode.VIDEO,
-    min_pose_detection_confidence=0.5,
-    min_pose_landmarks_confidence=0.5,
-    min_hand_landmarks_confidence=0.5,
-)
-holistic = HolisticLandmarker.create_from_options(options)
 
 # ── Whisper ────────────────────────────────────────────────────────────────────
 
@@ -270,7 +250,7 @@ def main_loop():
         print(f"Available signs for animation ({len(available)}): {', '.join(available)}")
     else:
         print("No signs available for animation.")
-        print("Get some first:  python run.py isl-download")
+        print("Get some first:  python run.py train HELLO")
         print("Starting anyway — unknown words will show as text.\n")
 
     try:

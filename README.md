@@ -1,12 +1,13 @@
 # SignSlator
 
-**Indian Sign Language (ISL) ↔ Speech — both directions, fully offline, no recording required.**
+**Indian Sign Language (ISL) ↔ Speech — both directions, fully offline.**
 
 A bidirectional translator that reads hand gestures from a webcam and speaks them,
 and does the reverse: hear speech and watch the sign performed.
 
-Everything is free and open-source. Sign data comes from a public research dataset
-and is downloaded at runtime — you never have to film yourself.
+Everything is free and open-source. You train it on **your own** hands — the
+repository ships with an empty vocabulary and no sign data. If you would rather
+not record anything, an optional download pulls public ISL research data instead.
 
 ---
 
@@ -16,8 +17,19 @@ and is downloaded at runtime — you never have to film yourself.
 
 | Direction | Pipeline |
 |---|---|
-| **Sign → Speech** | Webcam → MediaPipe Holistic → hand landmarks (21 × 2) → DTW classifier → pyttsx3 |
+| **Sign → Speech** | Webcam → MediaPipe Hand Landmarker → hand landmarks (21 × 2) → DTW classifier → pyttsx3 |
 | **Speech → Sign** | Microphone → Whisper ASR → text → sign lookup → landmark animation |
+
+**Why a dedicated hand model?** The old pipeline used MediaPipe *Holistic*, which
+runs one shared backbone for pose, face and hands. Its hand landmarks were
+noticeably noisy. The hand-only model was measured on the same scene:
+
+| | Hand Landmarker | Holistic |
+|---|---|---|
+| Landmark jitter (mean) | **1.80 mm/frame** | 4.02 mm/frame |
+| Detection cost | **27 ms/frame** | 36.7 ms/frame |
+
+Steadier input landmarks mean a cleaner signal for the classifier.
 
 **Why DTW and not a neural net?** The classifier compares the *shape of your hand
 movement over time* against stored templates using Dynamic Time Warping. It needs
@@ -32,8 +44,8 @@ black-box model — its confidence scores are interpretable and auto-calibrated.
 # 1. Install everything (dependencies + MediaPipe model)
 python setup.py
 
-# 2. Download starter signs — no camera, no recording
-python run.py isl-download
+# 2. Train your first sign — 5 samples, 3 seconds each
+python run.py train HELLO
 
 # 3a. Sign → speech (camera)
 python run.py recognize
@@ -45,76 +57,78 @@ python run.py speech-to-sign
 Requires Python 3.9+, a webcam, and internet for the first setup.
 Windows / macOS / Linux.
 
+### Prefer not to record?
+
+```bash
+python run.py isl-download        # fetch ISL signs from the public ISL500 dataset
+```
+
+Your own recordings and downloaded templates live in the same pool and are used
+together, so you can mix both.
+
+---
+
+## Training
+
+```bash
+python run.py train HELLO                 # 5 samples × 3 seconds
+python run.py train THANKYOU --samples 8  # more samples → better accuracy
+python run.py list                        # what you have, and how many samples
+```
+
+Press **SPACE** to start each sample, **q** to cancel. During recording the engine
+warns you if no hand is in frame, and **refuses to save an empty sample** — an
+empty template would match every other empty template at distance 0.
+
+**Recording tips that measurably help:**
+
+- Keep the whole hand inside the frame, well lit, against a plain background.
+- Perform the sign at a similar distance and speed each time.
+- Record at least 5 samples; 8 is better for signs that look alike.
+- Sign in the same seat position — the model normalizes for hand size, but
+  consistent framing helps.
+
 ---
 
 ## Accuracy
 
-Measured by **leave-one-out cross-validation** — every sample is held out and
-matched against the rest, so the number reflects real generalization, not
-self-matching.
-
-```
-153 signs · 605 templates · held-out sessions
-FULL-DATASET ACCURACY:  572/605 = 94.5%
-```
-
-| | |
-|---|---|
-| Mean DTW distance — correct match | 0.366 |
-| Mean DTW distance — wrong match | 0.524 |
-| Signs at 100% | 137 / 153 |
-
-**Weakest signs** (honest reporting — these are the ones that get confused):
-
-| Sign | Accuracy | Typical confusion |
-|---|---|---|
-| BANDAID | 0/3 | FAT, EAST, I |
-| FIRE | 0/4 | — |
-| ALOT | 2/4 | BIG |
-| GLOVES | 2/4 | GLOVE (singular — near-miss) |
-| BOOK | 2/3 | SCHOOL |
-| WHY | 2/3 | — |
-
-**Important caveat:** 94.5% is measured *within one signer* — the ISL500
-dataset's performer. Accuracy on **your** hands is lower, because hand size,
-distance, and signing style differ. Measure it yourself:
+Accuracy is **measured on your data**, not asserted. After training:
 
 ```bash
-python run.py self-test          # records your samples, prints 3 accuracy numbers
+python run.py self-test          # records your samples, prints accuracy numbers
 ```
 
-Full per-sign breakdown and confusion list: [`docs/accuracy_report.txt`](docs/accuracy_report.txt)
+Three design decisions matter, and each was measured rather than assumed:
 
----
+**1. Scale normalization.** MediaPipe's coordinates depend on hand distance and
+hand size — the main reason one person's templates fail on another. Each hand is
+centered on the wrist and divided by its palm size, leaving pure hand *shape*.
+On a 10-sign benchmark this raised held-out accuracy from **92.5% to 97.5%**.
 
-## The sign chart
+**2. Auto-calibrated thresholds.** DTW distances are scale-dependent, so a fixed
+acceptance threshold is meaningless. The system learns the threshold from the
+template set itself — the 90th percentile of same-sign distances versus the 10th
+percentile of different-sign distances.
 
-Every downloaded sign is rendered as a hand-skeleton animation, so you can see
-exactly what movement each word requires.
-
-![Sign chart](docs/sign_chart_preview.png)
-
-```bash
-python run.py chart                 # regenerate: PNG poster + browseable HTML
-python run.py guide --video HELLO   # download the real signer's reference video
-```
+**3. Margin over the runner-up.** A low absolute distance is not evidence when two
+signs look alike. A match is only accepted when it also beats the second-best sign
+by a margin ratio.
 
 ---
 
 ## All commands
 
-| Command | What it does |
+| Command | What does it do |
 |---|---|
-| `python run.py isl-download` | Fetch ISL signs from the ISL500 dataset (no recording) |
-| `python run.py isl-evaluate` | Leave-one-out accuracy on a sign set |
-| `python run.py full-eval` | Accuracy across **all** downloaded signs |
-| `python run.py self-test` | Measure accuracy on **your** hands |
+| `python run.py train HELLO` | Record your own samples for a sign |
+| `python run.py list` | List trained signs and sample counts |
 | `python run.py recognize` | Live sign → speech |
 | `python run.py speech-to-sign` | Live speech → sign animation |
-| `python run.py train HELLO` | Record your own samples for a sign |
+| `python run.py self-test` | Measure accuracy on **your** hands |
+| `python run.py isl-download` | Fetch ISL signs from the ISL500 dataset (optional) |
+| `python run.py isl-evaluate` | Leave-one-out accuracy on a downloaded sign set |
 | `python run.py chart` | Generate the visual sign chart |
-| `python run.py guide` | Render individual sign animations / reference videos |
-| `python run.py list` | List downloaded signs |
+| `python run.py guide` | Render individual sign animations |
 | `python run.py camera` | Camera + landmark preview |
 | `python run.py demo` | Quick component check |
 
@@ -122,17 +136,12 @@ python run.py guide --video HELLO   # download the real signer's reference video
 
 ## Vocabulary
 
-**153 ISL signs** included in a typical setup, out of **500** available.
-Add any of them:
+The vocabulary is **whatever you train**. `run.py train` accepts any name — it is
+not limited to a fixed list.
 
-```bash
-python run.py isl-download --words Baby Bank Ball Teacher Friend
-python run.py isl-download --sessions 8      # more templates → better accuracy
-python run.py list
-```
-
-Note: ISL500 has no "Sorry", "Thank", "Stop", or "When" — the closest signs are
-**Regret**, **Thankyou**, **Stay**, and **Which**.
+If you use `isl-download`, the default set covers everyday words (HELLO, YES, NO,
+WATER, THANKYOU, ...). ISL500 has no "Sorry", "Thank", "Stop", or "When" — the
+closest signs are **Regret**, **Thankyou**, **Stay**, and **Which**.
 
 ---
 
@@ -191,12 +200,12 @@ they are regenerated by the commands above, which keeps the repository small.
 
 | Component | Library | License |
 |---|---|---|
-| Hand / body landmarks | MediaPipe Holistic | Apache 2.0 (Google) |
+| Hand landmarks | MediaPipe Hand Landmarker | Apache 2.0 (Google) |
 | Sequence classification | DTW (custom, NumPy) | — |
 | Speech recognition | OpenAI Whisper (base) | MIT |
 | Speech synthesis | pyttsx3 | MPL-2.0 |
 | Capture / rendering | OpenCV, Pillow | Apache 2.0 / HPND |
-| Sign data | ISL500 (HuggingFace) | research & academic |
+| Sign data (optional) | ISL500 (HuggingFace) | research & academic |
 
 ---
 
@@ -204,8 +213,9 @@ they are regenerated by the commands above, which keeps the repository small.
 
 - **Isolated signs only.** Continuous signing (full sentences) is a research
   problem and is not attempted here.
-- **Signer-dependent.** 94.5% is within one signer. Cross-signer accuracy is
-  lower; recording your own samples closes the gap.
+- **Accuracy is measured on your own recordings.** The more samples per sign and
+  the more consistent your framing, the better it gets. There is no shipped
+  accuracy number, because there is no shipped training data.
 - **Recognition, not translation.** ISL has its own grammar; this maps signs to
   English words, not fluent ISL sentence structure.
 - **Animation replays recorded landmarks** — a moving hand skeleton, not a
@@ -233,8 +243,9 @@ cd signslator
 # 2. Install dependencies + download the MediaPipe model
 python setup.py
 
-# 3. Download the signs (no camera, no recording)
-python run.py isl-download
+# 3. Train a sign (or download some instead)
+python run.py train HELLO
+#   or: python run.py isl-download
 
 # 4. Run it
 python run.py recognize        # sign → speech
@@ -246,8 +257,8 @@ That's the whole thing — about 5 minutes on a fresh machine.
 ### On your own computer
 
 Same repo, same commands. Your working copy is at
-`C:\Users\Ayush Kumar\sign-language-workspace` and already has 153 signs, so you
-can skip straight to `python run.py recognize`.
+`C:\Users\Ayush Kumar\sign-language-workspace`. Its vocabulary is whatever you
+have trained there — start with `python run.py train HELLO`.
 
 ### Offline / no internet at setup time
 
@@ -257,7 +268,7 @@ python package.py              # → signslator-portable.zip (includes the model
 # target machine:
 #   1. unzip anywhere
 #   2. python setup.py
-#   3. python run.py recognize
+#   3. python run.py train HELLO
 ```
 
 ### What each setup step does
@@ -265,7 +276,7 @@ python package.py              # → signslator-portable.zip (includes the model
 | Step | What it fetches | Size |
 |---|---|---|
 | `python setup.py` | Python packages + MediaPipe model | ~200 MB |
-| `python run.py isl-download` | ISL sign templates | ~6 MB |
+| `python run.py isl-download` | ISL sign templates (optional) | ~6 MB |
 | first `speech-to-sign` run | Whisper model | ~140 MB |
 
 Nothing else is required. There is no database, no API key, and no account.
@@ -276,7 +287,10 @@ Nothing else is required. There is no database, no API key, and no account.
 
 MIT — see [LICENSE](LICENSE).
 
-**Data notice:** this repository ships no sign-language data. Templates are
-downloaded at runtime from the [ISL500 dataset](https://huggingface.co/datasets/ISL500/ISL-DATA),
-which is licensed for **research and academic use**. Do not redistribute derived
-templates commercially.
+**Data notice:** this repository ships **no sign-language data** — your templates
+are recordings of your own hands, stored locally under `signslator/data/signs/`.
+
+If you use the optional `isl-download`, templates are derived at runtime from the
+[ISL500 dataset](https://huggingface.co/datasets/ISL500/ISL-DATA), which is
+licensed for **research and academic use**. Do not redistribute derived templates
+commercially.

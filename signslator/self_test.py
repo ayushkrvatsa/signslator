@@ -26,7 +26,7 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python.vision import (
-    HolisticLandmarker, HolisticLandmarkerOptions, RunningMode,
+    HandLandmarker, HandLandmarkerOptions, RunningMode,
 )
 
 from signslator import get_vocabulary
@@ -38,7 +38,7 @@ from signslator.sign_to_speech import (
 SELF_DIR = os.path.join(DATA_DIR, "_selftest")
 
 
-def record_samples(sign: str, num_samples: int, duration: float, holistic) -> list:
+def record_samples(sign: str, num_samples: int, duration: float, landmarker) -> list:
     """Record N samples of a sign from the webcam. Returns feature sequences."""
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -80,7 +80,7 @@ def record_samples(sign: str, num_samples: int, duration: float, holistic) -> li
             frames += 1
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            results.append(holistic.detect_for_video(mp_img, int(time.time() * 1000)))
+            results.append(landmarker.detect_for_video(mp_img, int(time.time() * 1000)))
 
             display = frame.copy()
             progress = (time.time() - start) / duration
@@ -201,21 +201,22 @@ def main():
     args = ap.parse_args()
 
     base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
-    opts = HolisticLandmarkerOptions(
+    opts = HandLandmarkerOptions(
         base_options=base_options,
         running_mode=RunningMode.VIDEO,
-        min_hand_landmarks_confidence=0.5,
+        num_hands=2,
+        min_hand_detection_confidence=0.5,
     )
-    holistic = HolisticLandmarker.create_from_options(opts)
+    landmarker = HandLandmarker.create_from_options(opts)
 
     # Load ISL500 templates
     from signslator.sign_to_speech import load_all_templates
     isl = load_all_templates()
-    print(f"ISL500 templates loaded: {len(isl)} signs")
+    print(f"Templates loaded: {len(isl)} signs")
 
     signs = args.sign if args.sign else get_vocabulary()
     if not signs:
-        print("No signs. Run: python run.py isl-download")
+        print("No signs yet. Train one:  python run.py train HELLO")
         return
 
     print(f"\nWill record {args.samples} sample(s) of: {', '.join(signs)}")
@@ -224,11 +225,11 @@ def main():
     sequences = {}
     for s in signs:
         print(f"\n{'='*50}\n  SIGN: {s}\n{'='*50}")
-        seqs = record_samples(s, args.samples, args.duration, holistic)
+        seqs = record_samples(s, args.samples, args.duration, landmarker)
         if seqs:
             sequences[s] = seqs
 
-    holistic.close()
+    landmarker.close()
 
     if not sequences:
         print("No samples captured.")

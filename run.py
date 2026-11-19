@@ -116,11 +116,11 @@ def run_demo():
     import mediapipe as mp
     from mediapipe.tasks import python
     from mediapipe.tasks.python.vision import (
-        HolisticLandmarker, HolisticLandmarkerOptions, RunningMode,
+        HandLandmarker, HandLandmarkerOptions, RunningMode,
     )
     import numpy as np
 
-    MODEL_PATH = os.path.join(PROJECT_ROOT, "signslator", "models", "holistic_landmarker.task")
+    MODEL_PATH = os.path.join(PROJECT_ROOT, "signslator", "models", "hand_landmarker.task")
 
     print("=" * 55)
     print("SignSlator Quick Demo")
@@ -130,11 +130,13 @@ def run_demo():
     # 1. Camera + landmarks (3 seconds)
     print("[1/3] Camera + Landmarks — showing for 3 seconds...")
     base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
-    options = HolisticLandmarkerOptions(
+    options = HandLandmarkerOptions(
         base_options=base_options,
         running_mode=RunningMode.VIDEO,
+        num_hands=2,
+        min_hand_detection_confidence=0.5,
     )
-    holistic = HolisticLandmarker.create_from_options(options)
+    landmarker = HandLandmarker.create_from_options(options)
 
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -150,23 +152,21 @@ def run_demo():
                 break
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            result = holistic.detect_for_video(mp_image, int(time.time() * 1000))
+            result = landmarker.detect_for_video(mp_image, int(time.time() * 1000))
 
             display = frame.copy()
             if result:
-                pose_ok = result.pose_landmarks is not None
-                l_hand = result.left_hand_landmarks is not None
-                r_hand = result.right_hand_landmarks is not None
-                status = f"Pose: {'OK' if pose_ok else 'no'} | L: {'Y' if l_hand else '-'} | R: {'Y' if r_hand else '-'}"
-                cv2.putText(display, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                if result.left_hand_landmarks:
-                    for lm in result.left_hand_landmarks:
+                hands = getattr(result, "hand_landmarks", None) or []
+                handed = getattr(result, "handedness", None) or []
+                labels = ", ".join(hh[0].category_name for hh in handed if hh) or "-"
+                status = f"Hands: {len(hands)} | {labels}"
+                color = (0, 255, 0) if hands else (0, 0, 255)
+                cv2.putText(display, status, (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                for hand in hands:
+                    for lm in hand:
                         x, y = int(lm.x * 640), int(lm.y * 480)
                         cv2.circle(display, (x, y), 4, (255, 0, 0), -1)
-                if result.right_hand_landmarks:
-                    for lm in result.right_hand_landmarks:
-                        x, y = int(lm.x * 640), int(lm.y * 480)
-                        cv2.circle(display, (x, y), 4, (0, 0, 255), -1)
 
             cv2.imshow("SignSlator Demo — Camera", display)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -175,7 +175,7 @@ def run_demo():
         cap.release()
         cv2.destroyAllWindows()
         print("  ✓ Camera + landmarks working")
-    holistic.close()
+    landmarker.close()
 
     # 2. Whisper test
     print("[2/3] Whisper speech recognition — loading model...")
@@ -291,7 +291,7 @@ def main():
             existing = get_vocabulary()
             if existing:
                 print(f"Already have ({len(existing)}): {', '.join(existing)}")
-            print("\nStarter words available from ISL500:")
+            print("\nStarter words (optional, from the ISL500 dataset):")
             for i, s in enumerate(STARTER_WORDS, 1):
                 print(f"  {i}. {s.upper()}")
             print("\nOr type any custom sign name.")
@@ -325,7 +325,7 @@ def main():
     else:
         parser.print_help()
         print("\nQuick start:")
-        print("  python run.py isl-download    # Get 13 ISL signs (no recording)")
+        print("  python run.py train HELLO     # record your first sign")
         print("  python run.py isl-evaluate    # Check accuracy")
         print("  python run.py recognize       # Live recognition")
         print("  python run.py speech-to-sign  # Speech to animation")
