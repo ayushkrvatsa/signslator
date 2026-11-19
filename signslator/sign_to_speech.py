@@ -258,34 +258,117 @@ def find_best_match(live_seq: np.ndarray, templates: dict) -> tuple:
     return best_sign, best_dist, distances
 
 
+CALIBRATION_CACHE = os.path.join(DATA_DIR, "_calibration.json")
+# Must match the max_len used by live matching, or the threshold is on a
+# different distance scale and the gate becomes meaningless.
+_CAL_MAX_LEN = 64
+_CAL_SAME_PAIRS = 2        # same-sign pairs sampled per sign
+_CAL_DIFF_SIGNS = 12       # other signs sampled per sign
+
+
+def _template_paths() -> dict:
+    """Map sign name → sorted list of template file paths."""
+    paths = {}
+    if not os.path.isdir(DATA_DIR):
+        return paths
+    for sign in sorted(os.listdir(DATA_DIR)):
+        d = os.path.join(DATA_DIR, sign)
+        if not os.path.isdir(d):
+            continue
+        files = sorted(f for f in os.listdir(d) if f.endswith(".npy"))
+        if files:
+            paths[sign] = [os.path.join(d, f) for f in files]
+    return paths
+
+
+def _fingerprint(paths: dict) -> str:
+    """Hash of template names, sizes and mtimes — invalidates the cache on change."""
+    import hashlib
+    h = hashlib.md5()
+    for sign, plist in sorted(paths.items()):
+        for p in plist:
+            try:
+                st = os.stat(p)
+                h.update(f"{sign}|{os.path.basename(p)}|{st.st_size}|{int(st.st_mtime)}|".encode())
+            except OSError:
+                pass
+    return h.hexdigest()
+
+
+def _load_calibration_cache(fp: str):
+    if not os.path.exists(CALIBRATION_CACHE):
+        return None
+    try:
+        with open(CALIBRATION_CACHE, "r") as f:
+            data = json.load(f)
+        if data.get("fingerprint") == fp:
+            return data
+    except Exception:
+        pass
+    return None
+
+
+def _save_calibration_cache(fp: str, max_distance: float, margin_ratio: float):
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(CALIBRATION_CACHE, "w") as f:
+            json.dump({"fingerprint": fp, "max_distance": max_distance,
+                       "margin_ratio": margin_ratio}, f)
+    except Exception:
+        pass
+
+
 def calibrate_thresholds(templates: dict, verbose: bool = True) -> tuple:
     """
     Auto-calibrate (max_distance, margin_ratio) from the template set itself.
 
-    Uses leave-one-out distances to learn what a "good" match looks like:
-      - correct_max  = worst distance when matching a held-out sample of the same sign
-      - wrong_min    = best distance when matching a different sign (the confusion floor)
+    Learns what a "good" match looks like from the templates:
+      - same-sign distances  → how close a correct match should be
+      - different-sign distances → how far a wrong match typically is
+
+    Comparing every template against every other is O(n²) — with 600 templates
+    that is ~180k DTW calls (≈16 min). So this samples pairs instead, and caches
+    the result so subsequent runs start instantly.
 
     Returns (max_distance, margin_ratio):
       - max_distance: accept a match only if its distance is below this
       - margin_ratio: and only if it beats the runner-up by at least this factor
     """
-    same_dists = []   # distances to same-sign templates
-    diff_dists = []   # distances to other-sign templates
+    paths = _template_paths()
+    fp = _fingerprint(paths)
 
-    for sign, tlist in templates.items():
-        for i, held in enumerate(tlist):
-            # Resample the held-out sequence once
-            held_r = _resample(held, min(len(held), 48)) if len(held) > 48 else held
-            for other_sign, olist in templates.items():
-                for j, other in enumerate(olist):
-                    if other_sign == sign and j == i:
-                        continue
-                    d = dtw_distance(held_r, other)
-                    if other_sign == sign:
-                        same_dists.append(d)
-                    else:
-                        diff_dists.append(d)
+    cached = _load_calibration_cache(fp)
+    if cached is not None:
+        if verbose:
+            print(f"  Calibration: loaded from cache "
+                  f"(max_distance={cached['max_distance']:.3f}, "
+                  f"margin_ratio={cached['margin_ratio']:.2f})")
+        return float(cached["max_distance"]), float(cached["margin_ratio"])
+
+    rng = np.random.default_rng(42)
+    signs = sorted(templates.keys())
+    reps = {s: templates[s][rng.integers(len(templates[s]))] for s in signs}
+
+    same_dists = []
+    diff_dists = []
+
+    for sign in signs:
+        tlist = templates[sign]
+        # ── same-sign: sample a few pairs within this sign ──
+        for _ in range(_CAL_SAME_PAIRS):
+            if len(tlist) < 2:
+                break
+            i, j = rng.choice(len(tlist), size=2, replace=False)
+            same_dists.append(
+                dtw_distance(tlist[i], tlist[j], max_len=_CAL_MAX_LEN))
+
+        # ── different-sign: compare this sign's rep against a sample of others ──
+        others = [s for s in signs if s != sign]
+        if len(others) > _CAL_DIFF_SIGNS:
+            others = list(rng.choice(others, size=_CAL_DIFF_SIGNS, replace=False))
+        for other in others:
+            diff_dists.append(
+                dtw_distance(reps[sign], reps[other], max_len=_CAL_MAX_LEN))
 
     if not same_dists or not diff_dists:
         return 5.0, 1.0
@@ -306,10 +389,14 @@ def calibrate_thresholds(templates: dict, verbose: bool = True) -> tuple:
     # Margin: how much better than the runner-up
     margin_ratio = 1.15 if diff_low > same_high else 1.0
 
+    _save_calibration_cache(fp, max_distance, margin_ratio)
+
     if verbose:
-        print(f"  Calibration: same-sign dist mean={same_dists.mean():.3f} p90={same_high:.3f}")
-        print(f"               diff-sign dist mean={diff_dists.mean():.3f} p10={diff_low:.3f}")
-        print(f"               → max_distance={max_distance:.3f}, margin_ratio={margin_ratio:.2f}")
+        print(f"  Calibration ({len(same_dists)} same / {len(diff_dists)} diff samples):")
+        print(f"    same-sign dist mean={same_dists.mean():.3f} p90={same_high:.3f}")
+        print(f"    diff-sign dist mean={diff_dists.mean():.3f} p10={diff_low:.3f}")
+        print(f"    → max_distance={max_distance:.3f}, margin_ratio={margin_ratio:.2f}")
+        print(f"    (cached to {os.path.basename(CALIBRATION_CACHE)})")
 
     return max_distance, margin_ratio
 
@@ -616,8 +703,8 @@ def main():
     rec_parser = subparsers.add_parser("recognize", help="Live sign recognition")
     rec_parser.add_argument("--threshold", type=float, default=0.3,
                            help="Confidence threshold (default: 0.3)")
-    rec_parser.add_argument("--max-dist", type=float, default=5.0,
-                           help="Max DTW distance for match (default: 5.0)")
+    rec_parser.add_argument("--max-dist", type=float, default=None,
+                            help="Accept threshold (default: auto-calibrate from templates)")
     rec_parser.add_argument("--window", type=float, default=2.0,
                            help="Recognition window in seconds (default: 2.0)")
 

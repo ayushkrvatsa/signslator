@@ -46,7 +46,8 @@ def run_list():
     list_trained_signs()
 
 
-def run_recognize(threshold=0.3, max_dist=5.0, window=2.0):
+def run_recognize(threshold=0.3, max_dist=None, window=2.0):
+    """max_dist=None means auto-calibrate from the templates."""
     from signslator.sign_to_speech import recognize_sign
     recognize_sign(threshold, max_dist, window)
 
@@ -229,7 +230,8 @@ def main():
     # Recognize
     rec_p = subparsers.add_parser("recognize", help="Phase 2: Live recognition")
     rec_p.add_argument("--threshold", type=float, default=0.3)
-    rec_p.add_argument("--max-dist", type=float, default=5.0)
+    rec_p.add_argument("--max-dist", type=float, default=None,
+                       help="Accept threshold (default: auto-calibrate from templates)")
     rec_p.add_argument("--window", type=float, default=2.0)
 
     # Speech to sign
