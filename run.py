@@ -46,6 +46,26 @@ def run_list():
     list_trained_signs()
 
 
+def run_remove(signs=None, assume_yes=False, all_signs=False):
+    """Delete trained signs. --all wipes the whole vocabulary."""
+    from signslator.sign_to_speech import remove_signs, list_trained_signs
+    from signslator import get_vocabulary
+
+    if all_signs:
+        signs = get_vocabulary()
+        if not signs:
+            print("No trained signs to remove.")
+            return
+    if not signs:
+        list_trained_signs()
+        print("\nUsage: python run.py remove SIGN [SIGN ...]")
+        print("       python run.py remove --all")
+        return
+
+    remove_signs(signs, assume_yes)
+    list_trained_signs()
+
+
 def run_recognize(threshold=0.3, max_dist=None, window=2.0):
     """max_dist=None means auto-calibrate from the templates."""
     from signslator.sign_to_speech import recognize_sign
@@ -240,6 +260,15 @@ def main():
     # List
     subparsers.add_parser("list", help="List trained signs")
 
+    # Remove
+    rm_p = subparsers.add_parser("remove", help="Delete trained signs")
+    rm_p.add_argument("signs", nargs="*", default=None,
+                      help="Sign name(s) to delete")
+    rm_p.add_argument("--all", dest="all_signs", action="store_true",
+                      help="Remove every trained sign")
+    rm_p.add_argument("-y", "--yes", dest="assume_yes", action="store_true",
+                      help="Skip the confirmation prompt")
+
     # ISL500 download
     isl_p = subparsers.add_parser("isl-download", help="Download ISL500 signs (no recording needed)")
     isl_p.add_argument("--words", nargs="*", default=None,
@@ -306,6 +335,8 @@ def main():
         run_speech_to_sign()
     elif args.command == "list":
         run_list()
+    elif args.command == "remove":
+        run_remove(args.signs, args.assume_yes, args.all_signs)
     elif args.command == "isl-download":
         words = args.words
         if words is None:

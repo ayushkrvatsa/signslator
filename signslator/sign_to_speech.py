@@ -31,6 +31,7 @@ from mediapipe.tasks.python.vision import (
 )
 import numpy as np
 import os
+import shutil
 import time
 import json
 import pyttsx3
@@ -514,8 +515,36 @@ def train_sign(sign_name: str, num_samples: int = 5, duration: float = 3.0):
     """
     Train: capture `num_samples` examples of `sign_name`.
     Each example records landmarks for `duration` seconds.
+
+    If samples already exist for this sign, asks whether to add to them or
+    replace them. Recording over existing templates without asking once
+    destroyed a user's trained signs — never do it silently.
     """
     sign_dir = os.path.join(DATA_DIR, sign_name.upper())
+
+    existing = []
+    if os.path.isdir(sign_dir):
+        existing = sorted(f for f in os.listdir(sign_dir) if f.endswith(".npy"))
+
+    start_index = 0
+    if existing:
+        print(f"\n'{sign_name.upper()}' already has {len(existing)} template(s).")
+        print("  [a] add to them    [r] replace them    [c] cancel")
+        choice = input("Choose [a/r/c]: ").strip().lower()
+        if choice in ("", "c"):
+            print("Cancelled.")
+            return False
+        if choice == "r":
+            for f in existing:
+                os.remove(os.path.join(sign_dir, f))
+            print(f"  removed {len(existing)} old template(s)")
+            start_index = 0
+        elif choice == "a":
+            start_index = len(existing)
+        else:
+            print("Cancelled.")
+            return False
+
     os.makedirs(sign_dir, exist_ok=True)
 
     print(f"\n{'='*55}")
@@ -596,7 +625,7 @@ def train_sign(sign_name: str, num_samples: int = 5, duration: float = 3.0):
             print(f"  WARNING: no hand detected in this sample — NOT saved.")
             print(f"           Put your hand in frame and record again.")
         else:
-            template_path = os.path.join(sign_dir, f"template_{sample_i}.npy")
+            template_path = os.path.join(sign_dir, f"template_{start_index + sample_i}.npy")
             np.save(template_path, seq)
             print(f"  Saved: {template_path} ({seq.shape[0]} frames)")
 
@@ -815,6 +844,58 @@ def list_trained_signs():
             print(f"  {sign_name}: {count} templates")
 
 
+def remove_signs(names, assume_yes: bool = False) -> int:
+    """
+    Delete trained sign directories. Returns how many were removed.
+
+    Asks for confirmation first unless `assume_yes`. Also drops the calibration
+    cache, since the accept threshold was derived from templates that are about
+    to disappear — keeping it would leave a threshold that no longer fits.
+    """
+    if isinstance(names, str):
+        names = [names]
+
+    found, missing = [], []
+    for raw in names:
+        name = raw.strip().upper()
+        sign_dir = os.path.join(DATA_DIR, name)
+        if os.path.isdir(sign_dir):
+            count = len([f for f in os.listdir(sign_dir) if f.endswith('.npy')])
+            found.append((name, sign_dir, count))
+        else:
+            missing.append(name)
+
+    if missing:
+        print(f"Not trained (nothing to remove): {', '.join(missing)}")
+
+    if not found:
+        return 0
+
+    print(f"\nWill remove {len(found)} sign(s):")
+    for name, _, count in found:
+        print(f"  {name:<16} {count} template(s)")
+
+    if not assume_yes:
+        answer = input("\nType 'yes' to delete: ").strip().lower()
+        if answer != "yes":
+            print("Cancelled — nothing was removed.")
+            return 0
+
+    removed = 0
+    for name, sign_dir, _ in found:
+        shutil.rmtree(sign_dir, ignore_errors=True)
+        print(f"  removed {name}")
+        removed += 1
+
+    calib = os.path.join(DATA_DIR, "_calibration.json")
+    if os.path.exists(calib):
+        os.remove(calib)
+        print("  cleared calibration cache (will be recomputed on next run)")
+
+    print(f"\nRemoved {removed} sign(s).")
+    return removed
+
+
 # ── Main CLI ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -844,6 +925,15 @@ def main():
     # List
     subparsers.add_parser("list", help="List trained signs")
 
+    # Remove
+    rm_parser = subparsers.add_parser("remove", help="Delete trained signs")
+    rm_parser.add_argument("signs", nargs="*", default=None,
+                           help="Sign name(s) to delete")
+    rm_parser.add_argument("--all", dest="all_signs", action="store_true",
+                           help="Remove every trained sign")
+    rm_parser.add_argument("-y", "--yes", dest="assume_yes", action="store_true",
+                           help="Skip the confirmation prompt")
+
     args = parser.parse_args()
 
     if args.command == "train":
@@ -864,6 +954,14 @@ def main():
         recognize_sign(args.threshold, args.max_dist, args.window)
 
     elif args.command == "list":
+        list_trained_signs()
+
+    elif args.command == "remove":
+        names = args.signs
+        if args.all_signs:
+            from signslator import get_vocabulary
+            names = get_vocabulary()
+        remove_signs(names, args.assume_yes)
         list_trained_signs()
 
     else:

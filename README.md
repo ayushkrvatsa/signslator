@@ -122,6 +122,8 @@ by a margin ratio.
 |---|---|
 | `python run.py train HELLO` | Record your own samples for a sign |
 | `python run.py list` | List trained signs and sample counts |
+| `python run.py remove HELLO` | Delete a trained sign (asks first) |
+| `python run.py remove --all -y` | Delete every trained sign |
 | `python run.py recognize` | Live sign → speech |
 | `python run.py speech-to-sign` | Live speech → sign animation |
 | `python run.py self-test` | Measure accuracy on **your** hands |
