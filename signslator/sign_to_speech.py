@@ -468,7 +468,17 @@ def calibrate_thresholds(templates: dict, verbose: bool = True) -> tuple:
                 dtw_distance(reps[sign], reps[other], max_len=_CAL_MAX_LEN))
 
     if not same_dists or not diff_dists:
-        return 5.0, 1.0
+        # Not enough templates to calibrate from (e.g. a single sample of a
+        # single sign). Fall back to a conservative absolute value — measured
+        # same-sign distances on normalized features sit around 0.03-0.25, so
+        # 0.5 admits a correct match while rejecting most noise. A hardcoded
+        # 5.0 here would have reported ~90% confidence for anything at all.
+        if verbose:
+            print("  Calibration: too few templates to learn from "
+                  f"({len(same_dists)} same / {len(diff_dists)} diff) — "
+                  "using the conservative default max_distance=0.5.")
+            print("  Record more samples to calibrate properly.")
+        return 0.5, 1.0
 
     same_dists = np.array(same_dists)
     diff_dists = np.array(diff_dists)
