@@ -36,7 +36,8 @@ import time
 import json
 import pyttsx3
 
-from signslator import VOCABULARY, SIGN_LANGUAGE
+from signslator import VOCABULARY, SIGN_LANGUAGE, canonicalize_sequence
+from signslator.body_tracking import detect_pose, draw_body
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,9 @@ POSE_CONN = [
 
 
 NORMALIZE_SCALE = True
+
+# Draw the pink head+torso overlay during live recognition. Costs ~12 ms/frame.
+TRACK_BODY = True
 
 
 def _normalize_hand(points: np.ndarray) -> np.ndarray:
@@ -220,7 +224,9 @@ def extract_sequence_features(result_list: list) -> np.ndarray:
     for r in result_list:
         f = extract_hand_features(r)
         seq.append(f)
-    return np.array(seq) if seq else np.zeros((0, 144))
+    if not seq:
+        return np.zeros((0, 144))
+    return canonicalize_sequence(np.array(seq))
 
 
 def _resample(seq: np.ndarray, target_len: int) -> np.ndarray:
@@ -641,7 +647,8 @@ def train_sign(sign_name: str, num_samples: int = 5, duration: float = 3.0):
 
 def recognize_sign(confidence_threshold: float = 0.3,
                    max_distance: float = None,
-                   window_seconds: float = 2.0) -> str:
+                   window_seconds: float = 2.0,
+                   track_body: bool = True) -> str:
     """
     Live recognition loop.
     Returns the recognized sign name, or None if no confident match.
@@ -698,6 +705,7 @@ def recognize_sign(confidence_threshold: float = 0.3,
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         result = hand_landmarker.detect_for_video(mp_image, int(time.time() * 1000))
+        pose_result = detect_pose(mp_image) if track_body else None
 
         result_buffer.append(result)
         if len(result_buffer) > buffer_size:
@@ -739,6 +747,9 @@ def recognize_sign(confidence_threshold: float = 0.3,
                     last_tts_time = now
 
         # ── drawing (cheap, every frame) ──
+        # Body first so the hands stay on top of it.
+        if track_body:
+            draw_body(display, getattr(pose_result, "pose_landmarks", None))
         hands_now = _draw_landmarks(display, result)
         if hands_now == 0:
             cv2.putText(display, "No hand in frame", (10, display.shape[0] - 30),
@@ -819,6 +830,7 @@ def load_all_templates() -> dict:
             if fname.endswith('.npy'):
                 path = os.path.join(sign_dir, fname)
                 seq = np.load(path)
+                seq = canonicalize_sequence(seq)
                 if seq.shape[0] >= 5 and _has_signal(seq):
                     templates[sign_name].append(seq)
                 else:
@@ -920,7 +932,10 @@ def main():
     rec_parser.add_argument("--max-dist", type=float, default=None,
                             help="Accept threshold (default: auto-calibrate from templates)")
     rec_parser.add_argument("--window", type=float, default=2.0,
-                           help="Recognition window in seconds (default: 2.0)")
+                            help="Recognition window in seconds (default: 2.0)")
+    rec_parser.add_argument("--no-body", dest="track_body", action="store_false",
+                            default=True,
+                            help="Disable the pink head+torso overlay")
 
     # List
     subparsers.add_parser("list", help="List trained signs")
@@ -951,7 +966,8 @@ def main():
         list_trained_signs()
 
     elif args.command == "recognize":
-        recognize_sign(args.threshold, args.max_dist, args.window)
+        recognize_sign(args.threshold, args.max_dist, args.window,
+                       track_body=args.track_body)
 
     elif args.command == "list":
         list_trained_signs()

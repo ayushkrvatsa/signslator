@@ -25,6 +25,10 @@ MODEL_PATH = os.path.join(MODEL_DIR, "hand_landmarker.task")
 MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
              "hand_landmarker/float16/latest/hand_landmarker.task")
 
+POSE_MODEL_PATH = os.path.join(MODEL_DIR, "pose_landmarker_lite.task")
+POSE_MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
+                  "pose_landmarker_lite/float16/latest/pose_landmarker_lite.task")
+
 # Core packages needed for sign→speech (camera, landmarks, TTS, classifier)
 CORE_PACKAGES = [
     "opencv-python",
@@ -117,24 +121,28 @@ def install_speech(with_whisper=True):
 
 
 def download_model():
-    print("\n[3/4] Checking MediaPipe model...")
-    if os.path.exists(MODEL_PATH):
-        size_mb = os.path.getsize(MODEL_PATH) / (1024 * 1024)
-        print(f"  Already present: {MODEL_PATH} ({size_mb:.1f} MB)")
-        return True
-
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    print(f"  Downloading hand_landmarker.task (~8 MB)...")
-    try:
-        import urllib.request
-        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-        print(f"  Saved: {MODEL_PATH}")
-        return True
-    except Exception as e:
-        print(f"  ERROR downloading model: {e}")
-        print(f"  Download manually and place at: {MODEL_PATH}")
-        print(f"  URL: {MODEL_URL}")
-        return False
+    print("\n[3/4] Checking MediaPipe models...")
+    ok = True
+    for path, url, label in (
+        (MODEL_PATH, MODEL_URL, "hand_landmarker.task (~8 MB)"),
+        (POSE_MODEL_PATH, POSE_MODEL_URL, "pose_landmarker_lite.task (~6 MB)"),
+    ):
+        if os.path.exists(path):
+            size_mb = os.path.getsize(path) / (1024 * 1024)
+            print(f"  Already present: {os.path.basename(path)} ({size_mb:.1f} MB)")
+            continue
+        os.makedirs(MODEL_DIR, exist_ok=True)
+        print(f"  Downloading {label}...")
+        try:
+            import urllib.request
+            urllib.request.urlretrieve(url, path)
+            print(f"  Saved: {path}")
+        except Exception as e:
+            print(f"  ERROR downloading {label}: {e}")
+            print(f"  Download manually and place at: {path}")
+            print(f"  URL: {url}")
+            ok = False
+    return ok
 
 
 def verify(with_whisper=True):

@@ -21,6 +21,8 @@ from mediapipe.tasks.python.vision import (
 import os
 import time
 
+from signslator.body_tracking import detect_pose, draw_body
+
 # ── Model ─────────────────────────────────────────────────────────────────────
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "hand_landmarker.task")
@@ -77,10 +79,14 @@ while True:
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
     result = landmarker.detect_for_video(mp_image, int(time.time() * 1000))
+    pose_result = detect_pose(mp_image)
 
     display = frame.copy()
 
     if not show_raw:
+        # Pink head+torso overlay, drawn under the hands.
+        draw_body(display, getattr(pose_result, "pose_landmarks", None))
+
         hands = getattr(result, "hand_landmarks", None) or []
         w, h = display.shape[1], display.shape[0]
 

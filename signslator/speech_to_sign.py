@@ -353,6 +353,80 @@ def play_text(text: str, duration: float = 2.0, speak: bool = False) -> list:
     return matched
 
 
+# ── Play everything ───────────────────────────────────────────────────────────
+
+def recorded_signs() -> list:
+    """Signs that actually have usable recordings, as (name, sample_count)."""
+    out = []
+    for name in get_vocabulary():
+        n = len(load_sign_templates(name))
+        if n:
+            out.append((name, n))
+    return out
+
+
+def play_all(duration: float = 2.0, gap: float = 0.8, loop: bool = False,
+             reverse: bool = False, speak: bool = False) -> list:
+    """
+    Replay every recorded sign one after another.
+
+    Signs that exist as a directory but hold no usable recording (for example a
+    nested folder created by accident) are skipped rather than showing an error.
+    """
+    entries = recorded_signs()
+    if reverse:
+        entries = entries[::-1]
+
+    if not entries:
+        print("No recorded signs to play.")
+        print("Train one with:  python run.py train HELLO")
+        return []
+
+    total = len(entries)
+    window = "SignSlator — All Signs"
+    played = []
+
+    print(f"Playing {total} sign(s), {duration:.1f}s each. "
+          f"Press 'q' in the window to stop.\n")
+
+    try:
+        while True:
+            for idx, (sign, count) in enumerate(entries, 1):
+                card = render_frame(
+                    None, None, f"{idx}/{total}  {sign}",
+                    f"{count} sample(s)  ·  {len(entries) - idx} to go")
+                cv2.imshow(window, card)
+                if cv2.waitKey(max(1, int(gap * 1000))) & 0xFF == ord('q'):
+                    print("\nStopped.")
+                    cv2.destroyAllWindows()
+                    return played
+
+                print(f"[{idx}/{total}] {sign}  ({count} sample(s))")
+                replay_sign_animation(sign, duration=duration, window=window)
+                played.append(sign)
+
+            if not loop:
+                break
+            print(f"\nLoop complete ({len(played)} sign(s) shown).\n")
+
+    except KeyboardInterrupt:
+        print("\nStopped.")
+
+    if speak and played:
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            engine.setProperty('rate', 150)
+            engine.say(" ".join(played))
+            engine.runAndWait()
+        except Exception as exc:
+            print(f"(TTS unavailable: {exc})")
+
+    cv2.destroyAllWindows()
+    print(f"\nPlayed {len(played)} sign(s).")
+    return played
+
+
 # ── Speech loop ───────────────────────────────────────────────────────────────
 
 def main_loop():
@@ -404,6 +478,14 @@ def main():
                     help="Speak the matched signs aloud")
     ap.add_argument("--list", action="store_true",
                     help="List recorded signs and exit")
+    ap.add_argument("--all", action="store_true",
+                    help="Replay every recorded sign, one by one")
+    ap.add_argument("--gap", type=float, default=0.8,
+                    help="Pause between signs in seconds (default 0.8)")
+    ap.add_argument("--loop", action="store_true",
+                    help="Keep replaying with --all until 'q' is pressed")
+    ap.add_argument("--reverse", action="store_true",
+                    help="Play --all in reverse alphabetical order")
     args = ap.parse_args()
 
     if args.list:
@@ -416,7 +498,10 @@ def main():
                 print(f"  {v}: {len(load_sign_templates(v))} sample(s)")
         return
 
-    if args.text:
+    if args.all:
+        play_all(duration=args.duration, gap=args.gap, loop=args.loop,
+                 reverse=args.reverse, speak=args.speak)
+    elif args.text:
         play_text(" ".join(args.text), duration=args.duration, speak=args.speak)
     else:
         main_loop()

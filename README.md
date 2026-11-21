@@ -32,6 +32,21 @@ noticeably noisy. The hand-only model was measured on the same scene:
 
 Steadier input landmarks mean a cleaner signal for the classifier.
 
+**Head and torso tracking.** A second, small model (`pose_landmarker_lite`, ~12 ms/frame)
+tracks the body, and the head and torso are drawn **in pink** under the hands in
+`recognize` and `camera`. Arms, legs and feet are detected but not rendered — only
+head (landmarks 0-10) and torso (shoulders and hips). Turn it off with
+`python run.py recognize --no-body`.
+
+```bash
+python run.py camera              # hands + pink head/torso overlay
+python run.py recognize           # same overlay during recognition
+python run.py recognize --no-body # hands only, ~12 ms/frame cheaper
+```
+
+Note: the pink overlay is live only. Recorded templates store hand features, so
+replayed animations do not include the body.
+
 **Why DTW and not a neural net?** The classifier compares the *shape of your hand
 movement over time* against stored templates using Dynamic Time Warping. It needs
 only a handful of examples per sign, runs in milliseconds on a CPU, and — unlike a
@@ -132,6 +147,8 @@ by a margin ratio.
 | `python run.py speech-to-sign` | Live speech → sign animation (microphone + Whisper) |
 | `python run.py text-to-sign "hello water"` | Typed text → sign animation (no mic needed) |
 | `python run.py text-to-sign --list` | Signs that have a recording |
+| `python run.py play-all` | Replay **every** recorded sign, one by one |
+| `python run.py play-all --reverse --loop --gap 1.5` | Reverse order, repeat, slower |
 | `python run.py self-test` | Measure accuracy on **your** hands |
 | `python run.py isl-download` | Fetch ISL signs from the ISL500 dataset (optional) |
 | `python run.py isl-evaluate` | Leave-one-out accuracy on a downloaded sign set |

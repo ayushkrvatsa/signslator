@@ -67,10 +67,10 @@ def run_remove(signs=None, assume_yes=False, all_signs=False):
     list_trained_signs()
 
 
-def run_recognize(threshold=0.3, max_dist=None, window=2.0):
+def run_recognize(threshold=0.3, max_dist=None, window=2.0, track_body=True):
     """max_dist=None means auto-calibrate from the templates."""
     from signslator.sign_to_speech import recognize_sign
-    recognize_sign(threshold, max_dist, window)
+    recognize_sign(threshold, max_dist, window, track_body=track_body)
 
 
 def run_speech_to_sign():
@@ -99,6 +99,12 @@ def run_text_to_sign(text=None, duration=2.0, speak=False, list_only=False):
         return
 
     play_text(" ".join(text), duration=duration, speak=speak)
+
+
+def run_play_all(duration=2.0, gap=0.8, loop=False, reverse=False, speak=False):
+    """Replay every recorded sign, one after another."""
+    from signslator.speech_to_sign import play_all
+    play_all(duration=duration, gap=gap, loop=loop, reverse=reverse, speak=speak)
 
 
 def run_isl_download(words=None, user="ISL_DATA_USER001", sessions=4):
@@ -277,6 +283,9 @@ def main():
     rec_p.add_argument("--max-dist", type=float, default=None,
                        help="Accept threshold (default: auto-calibrate from templates)")
     rec_p.add_argument("--window", type=float, default=2.0)
+    rec_p.add_argument("--no-body", dest="track_body", action="store_false",
+                       default=True,
+                       help="Disable the pink head+torso overlay")
 
     # Speech to sign
     subparsers.add_parser("speech-to-sign", help="Phase 3: Speech→sign animation")
@@ -292,6 +301,20 @@ def main():
                        help="Speak the matched signs aloud")
     t2s_p.add_argument("--list", action="store_true",
                        help="List recorded signs and exit")
+
+    # Play every recorded sign
+    all_p = subparsers.add_parser("play-all",
+                                  help="Replay every recorded sign, one by one")
+    all_p.add_argument("--duration", type=float, default=2.0,
+                       help="Seconds per sign (default 2.0)")
+    all_p.add_argument("--gap", type=float, default=0.8,
+                       help="Pause between signs in seconds (default 0.8)")
+    all_p.add_argument("--loop", action="store_true",
+                       help="Keep replaying until 'q' is pressed")
+    all_p.add_argument("--reverse", action="store_true",
+                       help="Play in reverse alphabetical order")
+    all_p.add_argument("--speak", action="store_true",
+                       help="Speak the sign names at the end")
 
     # List
     subparsers.add_parser("list", help="List trained signs")
@@ -366,11 +389,14 @@ def main():
         else:
             run_train(args.sign, args.samples, args.duration)
     elif args.command == "recognize":
-        run_recognize(args.threshold, args.max_dist, args.window)
+        run_recognize(args.threshold, args.max_dist, args.window,
+                      track_body=args.track_body)
     elif args.command == "speech-to-sign":
         run_speech_to_sign()
     elif args.command == "text-to-sign":
         run_text_to_sign(args.text, args.duration, args.speak, args.list)
+    elif args.command == "play-all":
+        run_play_all(args.duration, args.gap, args.loop, args.reverse, args.speak)
     elif args.command == "list":
         run_list()
     elif args.command == "remove":
